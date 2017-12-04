@@ -10,7 +10,7 @@ import java.io.IOException;
  */
 public class ZKDistributeServer {
 
-    private static final String connectString = "192.168.152.129:2181";//连接串
+    private static final String connectString = "172.26.15.11:2181";//连接串
     private static final int sessionTimeout = 30000;//超时设置
 
     private String parentNode = "/servers";//父节点
@@ -35,7 +35,11 @@ public class ZKDistributeServer {
                     }
                 }
             });
-        } catch (IOException e) {
+
+           /* String path = zk.create(parentNode,"parentNodeValue".getBytes(),
+                    ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+            System.out.println(path);*/
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -48,11 +52,11 @@ public class ZKDistributeServer {
     private String registerServer(String node){
         String nodePath = null;
         try {
-                //判断父节点是否存在，不存在则创建
-               if (null==zk.exists(parentNode,false)){
-                   zk.create(parentNode,"parentNodeValue".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL_SEQUENTIAL);
-               }
-               nodePath = zk.create(parentNode+"/"+node,node.getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL_SEQUENTIAL);
+            //判断父节点是否存在，不存在则创建
+           if (null==zk.exists(parentNode,false)){
+               zk.create(parentNode,"parentNodeValue".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+           }
+           nodePath = zk.create(parentNode+"/"+node,node.getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL_SEQUENTIAL);
             System.out.println("注册的节点路径为："+nodePath);
         } catch (KeeperException e) {
             e.printStackTrace();

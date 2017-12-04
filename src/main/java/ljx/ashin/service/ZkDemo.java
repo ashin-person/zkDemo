@@ -21,7 +21,7 @@ public class ZkDemo {
      */
     @Before
     public void init(){
-        String connectString = "192.168.152.129:2181";//连接窜
+        String connectString = "172.26.15.11:2181";//连接窜
         int sessionTimeout = 30000;
         try {
             System.out.println("==开始初始化zookeeper==");
