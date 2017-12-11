@@ -11,7 +11,12 @@ import java.io.IOException;
 public class ZKDistributeServer {
 
     private static final String connectString = "172.26.15.11:2181";//连接串
-    private static final int sessionTimeout = 30000;//超时设置
+    /**
+     * 超时设置,这个时间点会影响到 监控节点是否发生了变化，
+     * 就算有服务器停了，也会误认为是网络原因等连接不上，要
+     * 过了超时时间才会认为是机器宕机了
+     */
+    private static final int sessionTimeout = 2000;//
 
     private String parentNode = "/servers";//父节点
 

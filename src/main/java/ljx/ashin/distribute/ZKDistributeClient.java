@@ -50,6 +50,7 @@ public class ZKDistributeClient {
      */
     private List<String> getServers(String path){
         try {
+            System.out.println("获取服务器列表");
             List<String> list = this.zooKeeper.getChildren(path,true);
             serverList = list;
             for (String ip :serverList){
@@ -66,7 +67,7 @@ public class ZKDistributeClient {
 
     public void bussinessProcess(){
         System.out.println("做业务处理");
-        System.out.println("获取到的服务器列表");
+//        System.out.println("获取到的服务器列表");
         /*for (String server:serverList){
             System.out.println("服务器:"+server);
         }*/
