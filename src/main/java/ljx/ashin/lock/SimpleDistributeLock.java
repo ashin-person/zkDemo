@@ -15,9 +15,9 @@ import java.util.concurrent.CountDownLatch;
  */
 public class SimpleDistributeLock {
     //连接串
-    private static final String connectString = "172.26.15.11:2181";
+    private static final String connectString = "172.17.45.18:2181";
 
-    private static final int sessionTimeOut = 80000;//超时时间,2S
+    private static final int sessionTimeOut = 3000;//超时时间,2S
 
     private static  final String PARENT_LOCK_ROOT = "/parentLock";//父目录
 
@@ -47,17 +47,26 @@ public class SimpleDistributeLock {
                         //检查是否是最小节点，否则循环监控
                         try {
                             List<String> nodeList = zk.getChildren(PARENT_LOCK_ROOT,false);
-
-                            waitPath = waitPath.substring((PARENT_LOCK_ROOT+"/").length());
-                            int index = nodeList.indexOf(waitPath);
+                            Collections.sort(nodeList);
+                            System.out.println("服务器节点:"+nodeList.toString());
+//                            thisPath = thisPath.substring((PARENT_LOCK_ROOT+"/").length());
+                            System.out.println("检查当前节点是否是最小节点:"+thisPath);
+                            System.out.println("当前节点:"+thisPath);
+                            if (thisPath.contains("parentLock")){
+                                thisPath = thisPath.substring((PARENT_LOCK_ROOT+"/").length());
+                            }
+                            int index = nodeList.indexOf(thisPath);
                             if (index==-1){
                                 System.out.println("出错了");
                             }else if (index==0){
-                                binssenisProcess(waitPath);
+                                binssenisProcess(thisPath);
+                                //创建临时节点
+                                createAndListen();
                             }else {
                                 //获取前面一个节点，并监听该节点
-                                waitPath = SUB_LOCK+nodeList.get(index-1);
+                                waitPath = PARENT_LOCK_ROOT+SUB_LOCK+nodeList.get(index-1);
                                 zk.getData(waitPath,true,new Stat());
+                                System.out.println("监听节点:"+waitPath);
                             }
                         } catch (KeeperException e) {
                             e.printStackTrace();
@@ -79,31 +88,36 @@ public class SimpleDistributeLock {
                     String parentPath = zk.create(PARENT_LOCK_ROOT,"parentLockRoot".getBytes(),
                             ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
                 }
-
                 //创建临时节点
                thisPath = zk.create(PARENT_LOCK_ROOT+SUB_LOCK,"subNode".getBytes(),
                        ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL_SEQUENTIAL);
-
+                System.out.println("成功注册了子节点:"+thisPath);
                 //获取子节点
                List<String> subNodes = zk.getChildren(PARENT_LOCK_ROOT,false);
-               //检查当前节点是否是最小节点
-                thisPath = thisPath.substring((PARENT_LOCK_ROOT+"/").length());
-                int index = subNodes.indexOf(thisPath);
-                if (index==-1){
-                    System.out.println("出错了！");
-
-                }else if (index==0){//最小节点
+                Collections.sort(subNodes);
+                System.out.println("服务器节点:"+subNodes.toString());
+                if (subNodes.size()==1){
+                    System.out.println("只有一个节点");
                     binssenisProcess(thisPath);
-
+                    createAndListen();
                 }else {
-                    //获取前面一个节点，并监听该节点
-                    waitPath = SUB_LOCK+subNodes.get(index-1);
-                    zk.getData(waitPath,true,new Stat());
+                    //检查当前节点是否是最小节点
+                    thisPath = thisPath.substring((PARENT_LOCK_ROOT+"/").length());
+                    int index = subNodes.indexOf(thisPath);
+                    if (index==-1){
+                        System.out.println("出错了！");
+                    }else if (index==0){//最小节点
+                        binssenisProcess(thisPath);
+                        createAndListen();
+                    }else {
+                        //获取前面一个节点，并监听该节点
+                        waitPath = PARENT_LOCK_ROOT+"/"+subNodes.get(index-1);
+                        System.out.println("前面的一个节点:"+waitPath+"  系统时间:"+System.currentTimeMillis());
+                        zk.getData(waitPath,true,new Stat());
+                        System.out.println("监听节点:"+waitPath);
+                    }
                 }
-
             }
-
-
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -117,13 +131,17 @@ public class SimpleDistributeLock {
         try {
             Thread.sleep(5*1000);
             System.out.println("业务处理结束");
-
         } catch (InterruptedException e) {
             e.printStackTrace();
         }finally {
             //释放锁，即删除节点
             try {
-                zk.delete(PARENT_LOCK_ROOT+"/"+thisPath,-1);
+                if (path.contains("parentLock")){
+                    zk.delete(path,-1);
+                }else {
+                    zk.delete(PARENT_LOCK_ROOT+"/"+path,-1);
+                }
+                System.out.println("释放掉了锁:"+PARENT_LOCK_ROOT+"/"+path);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } catch (KeeperException e) {
@@ -133,23 +151,20 @@ public class SimpleDistributeLock {
     }
 
     /**
-     * 创建临时节点
-     * @return
+     * 创建临时节点并监听
      */
-    private String createThisPathNode(){
+    private void createAndListen(){
+        //创建临时节点
         try {
-            if (null==zk.exists(PARENT_LOCK_ROOT,false)){//锁根目录不存在则创建
-                String parentPath = zk.create(PARENT_LOCK_ROOT,"parentLockRoot".getBytes(),
-                        ZooDefs.Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT);
-            }
-
-            //创建临时节点
             thisPath = zk.create(PARENT_LOCK_ROOT+SUB_LOCK,"subNode".getBytes(),
-                    ZooDefs.Ids.CREATOR_ALL_ACL,CreateMode.EPHEMERAL_SEQUENTIAL);
-        }catch (Exception e){
+                    ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL_SEQUENTIAL);
+            System.out.println("成功创建了子节点:"+thisPath);
+            isMinNode(thisPath);
+        } catch (KeeperException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        return thisPath;
     }
 
     /**
@@ -157,34 +172,35 @@ public class SimpleDistributeLock {
      * @param thisPath
      * @return
      */
-    private boolean isMinNode(String thisPath){
-        boolean flag = false;//当前节点是否最小节点的标识，false-否 true-是
-        if (null!=thisPath&&!"".equals(thisPath)){
-            //获取所有的子节点
-            try {
-                List<String> subNodes = zk.getChildren(PARENT_LOCK_ROOT+SUB_LOCK,false);
-                thisPath = thisPath.substring(SUB_LOCK.length());
-                Collections.sort(subNodes);
-
+    private void isMinNode(String thisPath) throws KeeperException, InterruptedException {
+        if (null!=thisPath&&!"".equals(thisPath)) {//获取子节点
+            //获取子节点
+            List<String> subNodes = zk.getChildren(PARENT_LOCK_ROOT,false);
+            Collections.sort(subNodes);
+            System.out.println("服务器节点:"+subNodes.toString());
+            if (subNodes.size()==1){
+                System.out.println("只有一个节点");
+                binssenisProcess(thisPath);
+                createAndListen();
+            }else {
+                //检查当前节点是否是最小节点
+                thisPath = thisPath.substring((PARENT_LOCK_ROOT+"/").length());
+                System.out.println("检查当前节点是否是最小节点:"+thisPath);
                 int index = subNodes.indexOf(thisPath);
                 if (index==-1){
-                    System.out.println("发生了异常");
-                }else if (index==0){//当前节点是最小节点
-                    System.out.println("当前节点是最小节点");
-                    flag = true;
-                }else {
-                    System.out.println();
-                }
+                    System.out.println("出错了！");
 
-            } catch (KeeperException e) {
-                e.printStackTrace();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }else {
-            System.out.println("当前节点为空");
+                }else if (index==0){//最小节点
+                    binssenisProcess(thisPath);
+                    createAndListen();
+                }else {
+                    //获取前面一个节点，并监听该节点
+                    waitPath = PARENT_LOCK_ROOT+"/"+subNodes.get(index-1);
+                    System.out.println("前面的一个节点:"+waitPath+"  系统时间:"+System.currentTimeMillis());
+                    zk.getData(waitPath,true,new Stat());
+                }
         }
-        return flag;
+    }
     }
 
     public static void main(String[] args) {
